@@ -5,6 +5,9 @@ import { APPLICATION_STATUSES, STATUS_VARIANTS } from "@/lib/constants";
 import { deleteApplication } from "@/lib/actions/applications";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { CreateApplicationDialog } from "@/components/applications/create-application-dialog";
+import { GmailStatusCard } from "@/components/gmail/gmail-status-card";
+import { SyncEmailsButton } from "@/components/emails/sync-emails-button";
+import { EmailEventsList } from "@/components/emails/email-events-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +40,11 @@ function StatusBadge({ status }: { status: Application["status"] }) {
   return <Badge variant={STATUS_VARIANTS[status]}>{status}</Badge>;
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ gmail?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -48,6 +55,14 @@ export default async function DashboardPage() {
     .select("*")
     .order("applied_at", { ascending: false })
     .order("created_at", { ascending: false });
+
+  const { data: gmailConnection } = await supabase
+    .from("OS_Gmail_Connections")
+    .select("google_email")
+    .eq("user_id", user?.id)
+    .maybeSingle();
+
+  const { gmail } = await searchParams;
 
   const counts = APPLICATION_STATUSES.reduce<Record<string, number>>(
     (acc, status) => {
@@ -80,6 +95,37 @@ export default async function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-8 px-6 py-8">
+        {gmail === "connected" ? (
+          <p className="rounded-lg bg-emerald-100 px-4 py-3 text-sm font-medium text-emerald-800">
+            Gmail connected successfully.
+          </p>
+        ) : null}
+        {gmail === "error" ? (
+          <p className="rounded-lg bg-red-100 px-4 py-3 text-sm font-medium text-red-800">
+            Gmail connection failed. Please try again.
+          </p>
+        ) : null}
+
+        <GmailStatusCard googleEmail={gmailConnection?.google_email ?? null} />
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <CardTitle className="text-base">Email intelligence</CardTitle>
+                <CardDescription>
+                  Scans your Gmail, classifies job-related emails, and extracts
+                  application events.
+                </CardDescription>
+              </div>
+              <SyncEmailsButton />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <EmailEventsList userId={user?.id ?? ""} />
+          </CardContent>
+        </Card>
+
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-semibold">Applications</h2>

@@ -59,4 +59,7 @@ npm run lint    # eslint
 ## Status
 
 Foundation (Phase 1): Next.js scaffold, Supabase clients, session proxy, SQL migration.
-Auth (Phase 2) and Application CRUD (Phase 3) are next.
+Auth (Phase 2) + Application CRUD (Phase 3) complete.
+Gmail OAuth connection (Phase 4) complete.
+Email Intelligence (Phase 5): candidate filtering, AI classification + extraction into `OS_Email_Events`.
+Next: Matching Engine (Phase 6) → Action Engine (Phase 7) → Dashboard polish (Phase 8).
