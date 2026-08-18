@@ -59,7 +59,8 @@ export async function createApplication(
   }
 
   revalidatePath("/");
-  redirect("/");
+  revalidatePath("/applications");
+  redirect("/applications");
 }
 
 export async function updateApplication(
@@ -108,6 +109,7 @@ export async function updateApplication(
   }
 
   revalidatePath("/");
+  revalidatePath("/applications");
   revalidatePath(`/applications/${id}`);
   redirect(`/applications/${id}`);
 }
@@ -130,7 +132,8 @@ export async function deleteApplication(formData: FormData): Promise<void> {
   await supabase.from("OS_Applications").delete().eq("id", id).eq("user_id", user.id);
 
   revalidatePath("/");
-  redirect("/");
+  revalidatePath("/applications");
+  redirect("/applications");
 }
 
 export async function updateApplicationStatus(
@@ -159,5 +162,6 @@ export async function updateApplicationStatus(
     .eq("user_id", user.id);
 
   revalidatePath("/");
+  revalidatePath("/applications");
   revalidatePath(`/applications/${id}`);
 }

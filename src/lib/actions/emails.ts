@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { syncGmailEmails, type SyncResult } from "@/lib/email/sync";
+import { runMatching } from "@/lib/match/engine";
+import { generateTasks } from "@/lib/tasks/generate";
 
 export async function syncEmails(): Promise<SyncResult> {
   const supabase = await createClient();
@@ -14,7 +16,15 @@ export async function syncEmails(): Promise<SyncResult> {
     redirect("/login");
   }
 
-  return syncGmailEmails(supabase, user.id);
+  const result = await syncGmailEmails(supabase, user.id);
+
+  if (result.inserted > 0) {
+    const matching = await runMatching(supabase, user.id);
+    const tasks = await generateTasks(supabase, user.id);
+    result.message = `${result.message} Matching: ${matching.matched} auto-matched, ${matching.pending} need confirmation, ${matching.none} unmatched. Tasks created: ${tasks.created}.`;
+  }
+
+  return result;
 }
 
 export async function deleteEmailEvent(formData: FormData): Promise<void> {

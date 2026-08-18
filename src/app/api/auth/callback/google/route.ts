@@ -13,8 +13,11 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   const storedState = cookieStore.get("gmail_oauth_state")?.value;
 
-  const redirectTo = (status: string) => {
-    const response = NextResponse.redirect(`${origin}/?gmail=${status}`);
+  const redirectTo = (status: string, reason?: string) => {
+    const url = new URL(`${origin}/`);
+    url.searchParams.set("gmail", status);
+    if (reason) url.searchParams.set("reason", reason);
+    const response = NextResponse.redirect(url.toString());
     response.cookies.delete("gmail_oauth_state");
     return response;
   };
@@ -36,7 +39,10 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code);
 
     if (!tokens.refresh_token) {
-      return redirectTo("error");
+      return redirectTo(
+        "error",
+        "Google did not return a refresh token. Re-consent in the Google account prompt.",
+      );
     }
 
     const profile = await getGmailProfile(tokens.access_token);
@@ -60,8 +66,10 @@ export async function GET(request: NextRequest) {
     if (error) {
       throw error;
     }
-  } catch {
-    return redirectTo("error");
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Unknown Google OAuth error";
+    return redirectTo("error", message.slice(0, 200));
   }
 
   return redirectTo("connected");

@@ -1,208 +1,128 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import type { Application } from "@/lib/types";
-import { APPLICATION_STATUSES, STATUS_VARIANTS } from "@/lib/constants";
-import { deleteApplication } from "@/lib/actions/applications";
-import { SignOutButton } from "@/components/auth/sign-out-button";
-import { CreateApplicationDialog } from "@/components/applications/create-application-dialog";
-import { GmailStatusCard } from "@/components/gmail/gmail-status-card";
-import { SyncEmailsButton } from "@/components/emails/sync-emails-button";
-import { EmailEventsList } from "@/components/emails/email-events-list";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Trash2 } from "lucide-react";
+import { AppShell } from "@/components/layout/app-shell";
+import { StatsBar } from "@/components/overview/stats-bar";
+import { Funnel } from "@/components/overview/funnel";
+import { ActionRequired } from "@/components/overview/action-required";
+import { RecentActivity } from "@/components/overview/recent-activity";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function StatusBadge({ status }: { status: Application["status"] }) {
-  return <Badge variant={STATUS_VARIANTS[status]}>{status}</Badge>;
-}
-
-export default async function DashboardPage({
+export default async function OverviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ gmail?: string }>;
+  searchParams: Promise<{ match?: string; tasks?: string; gmail?: string; reason?: string }>;
 }) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: applications } = await supabase
-    .from("OS_Applications")
-    .select("*")
-    .order("applied_at", { ascending: false })
-    .order("created_at", { ascending: false });
+  const [appsResult, gmailResult] = await Promise.all([
+    supabase
+      .from("OS_Applications")
+      .select("*")
+      .eq("user_id", user?.id),
+    supabase
+      .from("OS_Gmail_Connections")
+      .select("google_email")
+      .eq("user_id", user?.id)
+      .maybeSingle(),
+  ]);
 
-  const { data: gmailConnection } = await supabase
-    .from("OS_Gmail_Connections")
-    .select("google_email")
-    .eq("user_id", user?.id)
-    .maybeSingle();
-
-  const { gmail } = await searchParams;
-
-  const counts = APPLICATION_STATUSES.reduce<Record<string, number>>(
-    (acc, status) => {
-      acc[status] = 0;
-      return acc;
-    },
-    {},
-  );
-  for (const app of applications ?? []) {
-    counts[app.status] = (counts[app.status] ?? 0) + 1;
-  }
+  const applications = appsResult.data ?? [];
+  const { match, tasks, gmail, reason } = await searchParams;
+  const matchParts = match ? match.split("|").map(Number) : null;
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">Orbit</h1>
-            <span className="text-muted-foreground">
-              Job Application OS
-            </span>
+    <AppShell>
+      <div className="mx-auto max-w-6xl px-8 py-8">
+        <div className="mb-5 flex items-end justify-between">
+          <div>
+            <h1 className="text-lg font-semibold">Overview</h1>
+            <p className="text-sm text-muted-foreground">
+              Here&apos;s what you should do today.
+            </p>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              {user?.email}
-            </span>
-            <SignOutButton />
-          </div>
+          <Link
+            href="/applications"
+            className="text-[13px] text-muted-foreground hover:text-foreground"
+          >
+            Open pipeline →
+          </Link>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-6xl space-y-8 px-6 py-8">
+        {matchParts ? (
+          <p className="mb-4 rounded-md bg-sky-50 px-4 py-2.5 text-[13px] text-sky-800">
+            Matching complete: {matchParts[0] ?? 0} auto-matched,{" "}
+            {matchParts[1] ?? 0} need confirmation, {matchParts[2] ?? 0} errors.
+          </p>
+        ) : null}
+        {tasks ? (
+          <p className="mb-4 rounded-md bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-800">
+            Tasks created: {tasks}.
+          </p>
+        ) : null}
         {gmail === "connected" ? (
-          <p className="rounded-lg bg-emerald-100 px-4 py-3 text-sm font-medium text-emerald-800">
+          <p className="mb-4 rounded-md bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-800">
             Gmail connected successfully.
           </p>
         ) : null}
         {gmail === "error" ? (
-          <p className="rounded-lg bg-red-100 px-4 py-3 text-sm font-medium text-red-800">
-            Gmail connection failed. Please try again.
+          <p className="mb-4 rounded-md bg-red-50 px-4 py-2.5 text-[13px] text-red-800">
+            <span className="font-medium">Gmail connection failed.</span>{" "}
+            {reason ? (
+              <>
+                Google said: <code className="break-all">{reason}</code>
+              </>
+            ) : (
+              "The OAuth callback rejected the request."
+            )}
           </p>
         ) : null}
 
-        <GmailStatusCard googleEmail={gmailConnection?.google_email ?? null} />
+        {!gmailResult?.data && gmail !== "connected" ? (
+          <Link
+            href="/gmail"
+            className="mb-5 flex items-center justify-between rounded-md border px-4 py-2.5 text-[13px] transition-colors hover:bg-accent/50"
+          >
+            <span>
+              <span className="font-medium">Connect Gmail</span> to automatically
+              detect interviews, assessments, and offers from email.
+            </span>
+            <span className="text-muted-foreground">Go to Gmail →</span>
+          </Link>
+        ) : null}
 
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <CardTitle className="text-base">Email intelligence</CardTitle>
-                <CardDescription>
-                  Scans your Gmail, classifies job-related emails, and extracts
-                  application events.
-                </CardDescription>
-              </div>
-              <SyncEmailsButton />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <EmailEventsList userId={user?.id ?? ""} />
-          </CardContent>
-        </Card>
+        <StatsBar applications={applications} />
 
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold">Applications</h2>
-            <p className="text-sm text-muted-foreground">
-              Track and manage your job applications.
-            </p>
+        <div className="mt-6 grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ActionRequired userId={user?.id ?? ""} />
           </div>
-          <CreateApplicationDialog />
+          <div className="rounded-lg border">
+            <div className="border-b px-5 py-3">
+              <h2 className="text-sm font-semibold">Pipeline</h2>
+            </div>
+            <div className="px-5 py-4">
+              <Funnel applications={applications} />
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {APPLICATION_STATUSES.map((status) => (
-            <Card key={status}>
-              <CardHeader className="pb-2">
-                <CardDescription>{status}</CardDescription>
-                <CardTitle className="text-2xl">{counts[status]}</CardTitle>
-              </CardHeader>
-            </Card>
-          ))}
+        <div className="mt-6 rounded-lg border">
+          <div className="flex items-center justify-between border-b px-5 py-3">
+            <h2 className="text-sm font-semibold">Recent activity</h2>
+            <Link
+              href="/gmail"
+              className="text-[13px] text-muted-foreground hover:text-foreground"
+            >
+              Email events →
+            </Link>
+          </div>
+          <div className="px-5 py-4">
+            <RecentActivity userId={user?.id ?? ""} />
+          </div>
         </div>
-
-        <Card>
-          <CardContent className="p-0">
-            {applications && applications.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Platform</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Applied</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {applications.map((app) => (
-                    <TableRow key={app.id}>
-                      <TableCell className="font-medium">
-                        <Link href={`/applications/${app.id}`}>
-                          {app.company}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{app.role}</TableCell>
-                      <TableCell>{app.platform ?? "—"}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={app.status} />
-                      </TableCell>
-                      <TableCell>{formatDate(app.applied_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <form action={deleteApplication} className="inline">
-                          <input type="hidden" name="id" value={app.id} />
-                          <Button
-                            type="submit"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Delete ${app.company}`}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </form>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
-                <p className="text-muted-foreground">
-                  No applications yet.
-                </p>
-                <CreateApplicationDialog />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
