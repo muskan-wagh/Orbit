@@ -1,68 +1,161 @@
-import Image from "next/image";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import type { Application } from "@/lib/types";
+import { APPLICATION_STATUSES, STATUS_VARIANTS } from "@/lib/constants";
+import { deleteApplication } from "@/lib/actions/applications";
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { CreateApplicationDialog } from "@/components/applications/create-application-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Trash2 } from "lucide-react";
 
-export default function Home() {
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function StatusBadge({ status }: { status: Application["status"] }) {
+  return <Badge variant={STATUS_VARIANTS[status]}>{status}</Badge>;
+}
+
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: applications } = await supabase
+    .from("OS_Applications")
+    .select("*")
+    .order("applied_at", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  const counts = APPLICATION_STATUSES.reduce<Record<string, number>>(
+    (acc, status) => {
+      acc[status] = 0;
+      return acc;
+    },
+    {},
+  );
+  for (const app of applications ?? []) {
+    counts[app.status] = (counts[app.status] ?? 0) + 1;
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen">
+      <header className="border-b">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold">Orbit</h1>
+            <span className="text-muted-foreground">
+              Job Application OS
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="hidden text-sm text-muted-foreground sm:inline">
+              {user?.email}
+            </span>
+            <SignOutButton />
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </header>
+
+      <main className="mx-auto max-w-6xl space-y-8 px-6 py-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold">Applications</h2>
+            <p className="text-sm text-muted-foreground">
+              Track and manage your job applications.
+            </p>
+          </div>
+          <CreateApplicationDialog />
         </div>
+
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          {APPLICATION_STATUSES.map((status) => (
+            <Card key={status}>
+              <CardHeader className="pb-2">
+                <CardDescription>{status}</CardDescription>
+                <CardTitle className="text-2xl">{counts[status]}</CardTitle>
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            {applications && applications.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Applied</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {applications.map((app) => (
+                    <TableRow key={app.id}>
+                      <TableCell className="font-medium">
+                        <Link href={`/applications/${app.id}`}>
+                          {app.company}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{app.role}</TableCell>
+                      <TableCell>{app.platform ?? "—"}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={app.status} />
+                      </TableCell>
+                      <TableCell>{formatDate(app.applied_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <form action={deleteApplication} className="inline">
+                          <input type="hidden" name="id" value={app.id} />
+                          <Button
+                            type="submit"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Delete ${app.company}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </form>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+                <p className="text-muted-foreground">
+                  No applications yet.
+                </p>
+                <CreateApplicationDialog />
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
